@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Video, VideoOff, Mic, MicOff, PhoneOff } from 'lucide-react';
-import SimplePeer from 'simple-peer';
+
+// We'll dynamically import SimplePeer
+let SimplePeerModule: any = null;
 
 interface VideoChatProps {
   roomId: string;
@@ -13,7 +15,7 @@ interface VideoChatProps {
 
 interface PeerConnection {
   userId: number;
-  peer: SimplePeer.Instance;
+  peer: any; // Dynamic SimplePeer instance
   username: string;
   stream?: MediaStream;
 }
@@ -28,10 +30,117 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
   const [isCalling, setIsCalling] = useState(false);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const peersRef = useRef<Record<number, PeerConnection>>({});
+  
+  // Remove a peer connection
+  const removePeer = useCallback((userId: number) => {
+    if (peersRef.current[userId]) {
+      peersRef.current[userId].peer.destroy();
+      const updatedPeers = { ...peersRef.current };
+      delete updatedPeers[userId];
+      peersRef.current = updatedPeers;
+      setPeers(updatedPeers);
+    }
+  }, []);
+  
+  // Handle new ICE candidate
+  const handleNewICECandidate = useCallback((data: any) => {
+    const { userId, candidate } = data;
+    
+    if (peersRef.current[userId] && candidate) {
+      peersRef.current[userId].peer.signal({ type: 'candidate', candidate });
+    }
+  }, []);
+  
+  // Handle incoming video answer
+  const handleVideoAnswer = useCallback((data: any) => {
+    const { userId, signal } = data;
+    
+    if (peersRef.current[userId]) {
+      peersRef.current[userId].peer.signal(signal);
+    }
+  }, []);
+  
+  // Create a new peer connection
+  const createPeer = useCallback((userId: number, username: string, initiator: boolean) => {
+    if (!localStream || !SimplePeerModule) return;
+    
+    const peer = new SimplePeerModule({
+      initiator,
+      stream: localStream,
+      trickle: true
+    });
+    
+    peer.on('signal', (signal: any) => {
+      if (!webSocket || webSocket.readyState !== WebSocket.OPEN || !user) return;
+      
+      webSocket.send(JSON.stringify({
+        type: initiator ? 'video_offer' : 'video_answer',
+        signal,
+        userId: user.id,
+        target: userId,
+        roomId
+      }));
+    });
+    
+    peer.on('stream', (remoteStream: MediaStream) => {
+      // Add remote stream to the peer object
+      const updatedPeers = { ...peersRef.current };
+      if (updatedPeers[userId]) {
+        updatedPeers[userId].stream = remoteStream;
+        peersRef.current = updatedPeers;
+        setPeers(updatedPeers);
+      }
+    });
+    
+    peer.on('error', (err: Error) => {
+      console.error('Peer error:', err);
+      toast({
+        title: 'Connection Error',
+        description: 'There was an error with the video connection',
+        variant: 'destructive'
+      });
+    });
+    
+    const peerObj: PeerConnection = { peer, userId, username };
+    peersRef.current[userId] = peerObj;
+    setPeers(prev => ({ ...prev, [userId]: peerObj }));
+  }, [localStream, SimplePeerModule, webSocket, user, roomId, toast]);
+  
+  // Handle incoming video offer
+  const handleVideoOffer = useCallback((data: any) => {
+    const { userId, username, signal } = data;
+    
+    // Create a new peer if it doesn't exist
+    if (!peersRef.current[userId]) {
+      createPeer(userId, username, false);
+    }
+    
+    // Signal the peer with the received offer
+    if (peersRef.current[userId]) {
+      peersRef.current[userId].peer.signal(signal);
+    }
+  }, [createPeer]);
+  
+  // Dynamically load SimplePeer
+  useEffect(() => {
+    if (isCalling && !SimplePeerModule) {
+      import('simple-peer').then(module => {
+        SimplePeerModule = module.default;
+      }).catch(error => {
+        console.error('Error loading SimplePeer:', error);
+        toast({
+          title: 'Failed to load video chat module',
+          description: 'There was an error loading the video chat feature',
+          variant: 'destructive'
+        });
+        setIsCalling(false);
+      });
+    }
+  }, [isCalling, toast]);
 
   // Initialize WebRTC
   useEffect(() => {
-    if (!webSocket || !user || !isCalling) return;
+    if (!webSocket || !user || !isCalling || !SimplePeerModule) return;
 
     const startMedia = async () => {
       try {
@@ -78,7 +187,7 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
   
   // Handle WebSocket messages for video chat
   useEffect(() => {
-    if (!webSocket || !user || !localStream) return;
+    if (!webSocket || !user || !localStream || !SimplePeerModule) return;
     
     const handleWebSocketMessage = async (event: MessageEvent) => {
       const data = JSON.parse(event.data);
@@ -87,14 +196,18 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
         case 'video_join':
           // Someone wants to join the video chat
           if (data.userId !== user.id && localStream) {
-            createPeer(data.userId, data.username, true);
+            if (typeof createPeer === 'function') {
+              createPeer(data.userId, data.username, true);
+            }
           }
           break;
           
         case 'video_offer':
           // Received an offer from someone
           if (data.target === user.id && localStream) {
-            handleVideoOffer(data);
+            if (typeof handleVideoOffer === 'function') {
+              handleVideoOffer(data);
+            }
           }
           break;
           
@@ -126,97 +239,9 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
     return () => {
       webSocket.removeEventListener('message', handleWebSocketMessage);
     };
-  }, [webSocket, user, localStream, roomId]);
+  }, [webSocket, user, localStream, SimplePeerModule, createPeer, handleVideoOffer, handleVideoAnswer, handleNewICECandidate, removePeer]);
   
-  // Create a new peer connection
-  const createPeer = (userId: number, username: string, initiator: boolean) => {
-    if (!localStream) return;
-    
-    const peer = new SimplePeer({
-      initiator,
-      stream: localStream,
-      trickle: true
-    });
-    
-    peer.on('signal', (signal) => {
-      if (!webSocket || webSocket.readyState !== WebSocket.OPEN || !user) return;
-      
-      webSocket.send(JSON.stringify({
-        type: initiator ? 'video_offer' : 'video_answer',
-        signal,
-        userId: user.id,
-        target: userId,
-        roomId
-      }));
-    });
-    
-    peer.on('stream', (remoteStream) => {
-      // Add remote stream to the peer object
-      const updatedPeers = { ...peersRef.current };
-      if (updatedPeers[userId]) {
-        updatedPeers[userId].stream = remoteStream;
-        peersRef.current = updatedPeers;
-        setPeers(updatedPeers);
-      }
-    });
-    
-    peer.on('error', (err) => {
-      console.error('Peer error:', err);
-      toast({
-        title: 'Connection Error',
-        description: 'There was an error with the video connection',
-        variant: 'destructive'
-      });
-    });
-    
-    const peerObj: PeerConnection = { peer, userId, username };
-    peersRef.current[userId] = peerObj;
-    setPeers(prev => ({ ...prev, [userId]: peerObj }));
-  };
-  
-  // Handle incoming video offer
-  const handleVideoOffer = (data: any) => {
-    const { userId, username, signal } = data;
-    
-    // Create a new peer if it doesn't exist
-    if (!peersRef.current[userId]) {
-      createPeer(userId, username, false);
-    }
-    
-    // Signal the peer with the received offer
-    if (peersRef.current[userId]) {
-      peersRef.current[userId].peer.signal(signal);
-    }
-  };
-  
-  // Handle incoming video answer
-  const handleVideoAnswer = (data: any) => {
-    const { userId, signal } = data;
-    
-    if (peersRef.current[userId]) {
-      peersRef.current[userId].peer.signal(signal);
-    }
-  };
-  
-  // Handle new ICE candidate
-  const handleNewICECandidate = (data: any) => {
-    const { userId, candidate } = data;
-    
-    if (peersRef.current[userId] && candidate) {
-      peersRef.current[userId].peer.signal({ type: 'candidate', candidate });
-    }
-  };
-  
-  // Remove a peer connection
-  const removePeer = (userId: number) => {
-    if (peersRef.current[userId]) {
-      peersRef.current[userId].peer.destroy();
-      const updatedPeers = { ...peersRef.current };
-      delete updatedPeers[userId];
-      peersRef.current = updatedPeers;
-      setPeers(updatedPeers);
-    }
-  };
+
   
   // Toggle video on/off
   const toggleVideo = () => {

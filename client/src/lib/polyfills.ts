@@ -6,8 +6,10 @@ window.global = window;
 window.process = {
   env: { DEBUG: undefined },
   version: '',
-  nextTick: require('next-tick')
+  nextTick: function(fn: any) { setTimeout(fn, 0); }
 } as any;
 
-// Add Buffer from the buffer package
-window.Buffer = require('buffer/').Buffer;
+// Add Buffer to the global object for simple-peer
+// This is a minimal implementation to make simple-peer work
+import { Buffer as BufferPolyfill } from 'buffer';
+window.Buffer = BufferPolyfill;

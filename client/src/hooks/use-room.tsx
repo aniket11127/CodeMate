@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
-import { initialConnection, sendToWebSocket } from "@/lib/websocket";
-import { Message, CursorPosition, User, CodeSnippet } from "@/types";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "./use-auth";
+import { initialConnection, sendToWebSocket } from "../lib/websocket";
+import { Message, CursorPosition, User, CodeSnippet } from "../types";
+import { useToast } from "./use-toast";
+import { apiRequest } from "../lib/queryClient";
 
 interface RoomContextProps {
   children: ReactNode;
@@ -38,7 +38,7 @@ export function RoomProvider({ children, roomId }: RoomContextProps) {
   useEffect(() => {
     if (!user || !roomId) return;
 
-    const connection = initialConnection(roomId);
+    const connection = initialConnection(roomId, user.id, user.username);
 
     connection.onopen = () => {
       console.log("WebSocket connected");

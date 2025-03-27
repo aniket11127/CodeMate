@@ -11,6 +11,24 @@ export interface WebSocketMessage {
   [key: string]: any;
 }
 
+// User type
+export interface User {
+  id: number;
+  username: string;
+  email?: string;
+  createdAt?: string;
+}
+
+// Message type
+export interface Message {
+  id?: number;
+  content: string;
+  senderId: number;
+  senderName: string;
+  roomId: string;
+  timestamp: string;
+}
+
 // Cursor position for collaborative editing
 export interface CursorPosition {
   userId: number;

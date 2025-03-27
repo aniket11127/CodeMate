@@ -1,8 +1,12 @@
-import { WebSocketMessage } from "@/types";
+import { WebSocketMessage } from "../types";
 
-export function initialConnection(roomId: string): WebSocket {
+export function initialConnection(roomId: string, userId?: number, username?: string): WebSocket {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/ws?roomId=${roomId}`;
+  let wsUrl = `${protocol}//${window.location.host}/ws?roomId=${roomId}`;
+  
+  if (userId !== undefined && username) {
+    wsUrl += `&userId=${userId}&username=${encodeURIComponent(username)}`;
+  }
   
   return new WebSocket(wsUrl);
 }
