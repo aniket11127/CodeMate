@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { VideoChat } from "@/components/room/VideoChat";
 import {
   Card,
   CardContent,
@@ -50,6 +51,7 @@ import {
   MessageSquare,
   Share2,
   Link,
+  Video,
 } from "lucide-react";
 import { Room, Message, CompileResult } from "@shared/schema";
 
@@ -72,13 +74,15 @@ export default function CodeRoom() {
     error: roomError,
   } = useQuery<Room>({
     queryKey: [`/api/rooms/${roomId}`],
-    onSuccess: (room) => {
-      if (!isCodeUpdating.current) {
-        setCode(room.code || "");
-        setLanguage(room.language);
-      }
-    },
   });
+  
+  // Update editor when room data changes
+  useEffect(() => {
+    if (room && !isCodeUpdating.current) {
+      setCode(room.code || "");
+      setLanguage(room.language);
+    }
+  }, [room]);
 
   // Get chat messages
   const {
@@ -494,7 +498,7 @@ export default function CodeRoom() {
         {/* Chat & Participants - Right Side */}
         <div className="w-full md:w-1/3 h-[50vh] md:h-screen p-4 flex flex-col">
           <Tabs defaultValue="chat" className="h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="chat" className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
                 Chat
@@ -502,6 +506,10 @@ export default function CodeRoom() {
               <TabsTrigger value="users" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Users
+              </TabsTrigger>
+              <TabsTrigger value="video" className="flex items-center gap-2">
+                <Video className="h-4 w-4" />
+                Video
               </TabsTrigger>
             </TabsList>
 
@@ -625,6 +633,11 @@ export default function CodeRoom() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Video Chat Tab */}
+            <TabsContent value="video" className="flex-1 mt-0">
+              <VideoChat roomId={roomId!} webSocket={webSocket} />
             </TabsContent>
           </Tabs>
         </div>

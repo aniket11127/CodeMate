@@ -100,6 +100,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'chat_message',
             ...savedMessage
           }, ws);
+        } 
+        // Handle video chat messages
+        else if (data.type === 'video_join') {
+          // Broadcast to all clients in the room
+          broadcastToRoom(roomId, data);
+        } else if (data.type === 'video_offer' || data.type === 'video_answer' || data.type === 'video_ice_candidate') {
+          // Forward the offer/answer/candidate to the specific target client
+          const targetClient = Array.from(activeRooms.get(roomId) || [])
+            .find(client => client.userId === data.target) as WebSocketClient;
+            
+          if (targetClient && targetClient.readyState === WebSocket.OPEN) {
+            targetClient.send(JSON.stringify(data));
+          }
+        } else if (data.type === 'video_leave') {
+          // Broadcast to all clients in the room
+          broadcastToRoom(roomId, data);
         }
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
