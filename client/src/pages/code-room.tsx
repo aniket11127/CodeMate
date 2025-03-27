@@ -48,6 +48,8 @@ import {
   Loader2,
   Users,
   MessageSquare,
+  Share2,
+  Link,
 } from "lucide-react";
 import { Room, Message, CompileResult } from "@shared/schema";
 
@@ -346,6 +348,73 @@ export default function CodeRoom() {
               <Save className="mr-2 h-4 w-4" />
               Save
             </Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Share2 className="mr-2 h-4 w-4" />
+                  Share Room
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Share Meeting Room</DialogTitle>
+                  <DialogDescription>
+                    Copy this link to invite others to join this collaborative coding session
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      id="meeting-link"
+                      readOnly
+                      value={`${window.location.origin}/room/${roomId}`}
+                      className="w-full"
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={() => {
+                        const linkInput = document.getElementById("meeting-link") as HTMLInputElement;
+                        if (linkInput) {
+                          linkInput.select();
+                          navigator.clipboard.writeText(linkInput.value);
+                          toast({
+                            title: "Link copied to clipboard",
+                            description: "Share this link to collaborate with others!",
+                          });
+                        }
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="mt-4">
+                    <p className="text-sm font-medium mb-2">Meeting ID:</p>
+                    <div className="flex items-center justify-center bg-muted p-3 rounded-md font-mono text-lg">
+                      {roomId}
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={() => {
+                      const meetingInfo = `Join my collaborative code session!\n\nMeeting ID: ${roomId}\nLink: ${window.location.origin}/room/${roomId}`;
+                      navigator.clipboard.writeText(meetingInfo);
+                      toast({
+                        title: "Meeting info copied",
+                        description: "All meeting details copied to clipboard!",
+                      });
+                    }}
+                  >
+                    <Link className="mr-2 h-4 w-4" />
+                    Copy Meeting Info
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm">

@@ -123,8 +123,8 @@ export async function executeCode(code: string, language: string): Promise<Compi
         const outputPath = `${filepath}.exe`;
         
         try {
-          // Compile first
-          await executeCommand(`csc ${filepath} -out:${outputPath}`);
+          // Compile first using mcs (Mono C# compiler)
+          await executeCommand(`mcs ${filepath} -out:${outputPath}`);
           // Then run
           const output = await executeCommand(`mono ${outputPath}`);
           return { success: true, output };

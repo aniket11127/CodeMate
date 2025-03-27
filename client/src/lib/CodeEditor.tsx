@@ -75,9 +75,25 @@ const CodeEditor = ({ value, language, onChange, readOnly = false }: CodeEditorP
     }
   }, [value]);
 
+  // Map our language values to Monaco language identifiers
+  const getMonacoLanguage = (lang: string): string => {
+    const languageMap: Record<string, string> = {
+      'javascript': 'javascript',
+      'python': 'python',
+      'java': 'java',
+      'cpp': 'cpp',
+      'c': 'c',
+      'csharp': 'csharp',
+      'html': 'html',
+      'css': 'css'
+    };
+    return languageMap[lang] || lang;
+  };
+
   useEffect(() => {
     if (monacoEditorRef.current) {
-      monaco.editor.setModelLanguage(monacoEditorRef.current.getModel()!, language);
+      const monacoLang = getMonacoLanguage(language);
+      monaco.editor.setModelLanguage(monacoEditorRef.current.getModel()!, monacoLang);
     }
   }, [language]);
 
