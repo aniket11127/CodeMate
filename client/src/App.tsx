@@ -10,6 +10,7 @@ import LandingPage from "@/pages/landing-page";
 import { ProtectedRoute } from "./lib/protected-route";
 import { AuthProvider } from "./hooks/use-auth";
 import { RoomProvider } from "./hooks/use-room";
+import { CodeExecutionProvider } from "./hooks/use-code-execution";
 import { useParams } from "wouter";
 
 // Wrapper for the CodeRoom component that provides room context
@@ -17,7 +18,9 @@ function CodeRoomWithProvider() {
   const { roomId } = useParams();
   return (
     <RoomProvider roomId={roomId}>
-      <CodeRoom />
+      <CodeExecutionProvider>
+        <CodeRoom />
+      </CodeExecutionProvider>
     </RoomProvider>
   );
 }
