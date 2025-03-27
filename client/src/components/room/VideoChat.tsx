@@ -3,7 +3,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Video, VideoOff, Mic, MicOff, PhoneOff } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, PhoneOff, Phone } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // We'll dynamically import SimplePeer
 let SimplePeerModule: any = null;
@@ -28,6 +29,7 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [isCalling, setIsCalling] = useState(false);
+  const [callType, setCallType] = useState<'video' | 'voice'>('video');
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const peersRef = useRef<Record<number, PeerConnection>>({});
   
@@ -144,8 +146,9 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
 
     const startMedia = async () => {
       try {
+        // For voice-only calls, request only audio
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: videoEnabled,
+          video: callType === 'video' ? videoEnabled : false,
           audio: audioEnabled
         });
         
@@ -155,20 +158,23 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
           localVideoRef.current.srcObject = stream;
         }
         
-        // Let other users know we're ready for a call
+        // Let other users know we're ready for a call and what type of call it is
         if (webSocket.readyState === WebSocket.OPEN) {
           webSocket.send(JSON.stringify({
             type: 'video_join',
             userId: user.id,
             username: user.username,
-            roomId
+            roomId,
+            callType: callType // Send the call type so other peers know what to expect
           }));
         }
       } catch (error) {
         console.error('Error accessing media devices:', error);
         toast({
-          title: 'Camera/Microphone Error',
-          description: 'Could not access your camera or microphone. Please check permissions.',
+          title: callType === 'video' ? 'Camera/Microphone Error' : 'Microphone Error',
+          description: callType === 'video' 
+            ? 'Could not access your camera or microphone. Please check permissions.'
+            : 'Could not access your microphone. Please check permissions.',
           variant: 'destructive'
         });
         setIsCalling(false);
@@ -183,7 +189,7 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
         localStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [webSocket, user, roomId, isCalling, videoEnabled, audioEnabled]);
+  }, [webSocket, user, roomId, isCalling, videoEnabled, audioEnabled, callType]);
   
   // Handle WebSocket messages for video chat
   useEffect(() => {
@@ -289,8 +295,17 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
     setIsCalling(false);
   };
 
-  // Start a call
-  const startCall = () => {
+  // Start a video call
+  const startVideoCall = () => {
+    setCallType('video');
+    setVideoEnabled(true);
+    setIsCalling(true);
+  };
+
+  // Start a voice call
+  const startVoiceCall = () => {
+    setCallType('voice');
+    setVideoEnabled(false);
     setIsCalling(true);
   };
 
@@ -298,12 +313,16 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
     return (
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle className="text-base">Video Chat</CardTitle>
+          <CardTitle className="text-base">Communication</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Button onClick={startCall} className="w-full">
+        <CardContent className="space-y-2">
+          <Button onClick={startVideoCall} className="w-full">
             <Video className="mr-2 h-4 w-4" />
             Start Video Call
+          </Button>
+          <Button onClick={startVoiceCall} className="w-full" variant="outline">
+            <Phone className="mr-2 h-4 w-4" />
+            Start Voice Call
           </Button>
         </CardContent>
       </Card>
@@ -313,53 +332,88 @@ export function VideoChat({ roomId, webSocket }: VideoChatProps) {
   return (
     <Card className="mb-4 flex flex-col">
       <CardHeader className="py-3">
-        <CardTitle className="text-base">Video Chat</CardTitle>
+        <CardTitle className="text-base">
+          {callType === 'video' ? 'Video Call' : 'Voice Call'}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden p-0">
-        <div className="grid grid-cols-2 gap-2 p-2">
-          {/* Local video */}
-          <div className="relative">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="rounded-md w-full h-auto bg-muted"
-            />
-            <div className="absolute bottom-2 left-2 text-xs bg-background/70 px-2 py-1 rounded-full">
-              {user?.username} (You)
-            </div>
-          </div>
-          
-          {/* Remote videos */}
-          {Object.values(peers).map((peer) => (
-            <div key={peer.userId} className="relative">
+        {callType === 'video' ? (
+          <div className="grid grid-cols-2 gap-2 p-2">
+            {/* Local video */}
+            <div className="relative">
               <video
+                ref={localVideoRef}
                 autoPlay
+                muted
                 playsInline
                 className="rounded-md w-full h-auto bg-muted"
-                ref={(element) => {
-                  if (element && peer.stream) {
-                    element.srcObject = peer.stream;
-                  }
-                }}
               />
               <div className="absolute bottom-2 left-2 text-xs bg-background/70 px-2 py-1 rounded-full">
-                {peer.username}
+                {user?.username} (You)
               </div>
             </div>
-          ))}
-        </div>
+            
+            {/* Remote videos */}
+            {Object.values(peers).map((peer) => (
+              <div key={peer.userId} className="relative">
+                <video
+                  autoPlay
+                  playsInline
+                  className="rounded-md w-full h-auto bg-muted"
+                  ref={(element) => {
+                    if (element && peer.stream) {
+                      element.srcObject = peer.stream;
+                    }
+                  }}
+                />
+                <div className="absolute bottom-2 left-2 text-xs bg-background/70 px-2 py-1 rounded-full">
+                  {peer.username}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-4">
+            <div className="grid grid-cols-1 gap-2">
+              {/* Voice call participants */}
+              <div className="flex items-center justify-center bg-muted rounded-md p-4 mb-2">
+                <div className="flex items-center gap-2">
+                  <Mic className="h-5 w-5 opacity-70" />
+                  <span className="font-medium">{user?.username} (You)</span>
+                  {!audioEnabled && <MicOff className="h-4 w-4 text-destructive" />}
+                </div>
+              </div>
+              
+              {/* Connected peers */}
+              {Object.values(peers).map((peer) => (
+                <div key={peer.userId} className="flex items-center justify-center bg-muted rounded-md p-4">
+                  <div className="flex items-center gap-2">
+                    <Mic className="h-5 w-5 opacity-70" />
+                    <span className="font-medium">{peer.username}</span>
+                  </div>
+                </div>
+              ))}
+
+              {Object.keys(peers).length === 0 && (
+                <div className="text-center text-muted-foreground py-4">
+                  Waiting for others to join...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         
         {/* Controls */}
         <div className="flex justify-center gap-2 p-2 border-t">
-          <Button 
-            onClick={toggleVideo} 
-            variant={videoEnabled ? "default" : "outline"}
-            size="icon"
-          >
-            {videoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
-          </Button>
+          {callType === 'video' && (
+            <Button 
+              onClick={toggleVideo} 
+              variant={videoEnabled ? "default" : "outline"}
+              size="icon"
+            >
+              {videoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+            </Button>
+          )}
           <Button 
             onClick={toggleAudio} 
             variant={audioEnabled ? "default" : "outline"}

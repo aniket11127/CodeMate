@@ -13,10 +13,12 @@ interface RoomContextProps {
 
 interface RoomContextState {
   code: string;
+  language: string;
   users: User[];
   messages: Message[];
   cursors: CursorPosition[];
   updateCode: (newCode: string) => void;
+  updateLanguage: (newLanguage: string) => void;
   sendMessage: (message: Message) => void;
   sendCursorPosition: (cursorPosition: CursorPosition) => void;
   saveSnippet: (snippet: Omit<CodeSnippet, "id" | "userId" | "createdAt">) => Promise<void>;
@@ -26,6 +28,7 @@ const RoomContext = createContext<RoomContextState | undefined>(undefined);
 
 export function RoomProvider({ children, roomId }: RoomContextProps) {
   const [code, setCode] = useState("");
+  const [language, setLanguage] = useState("javascript");
   const [users, setUsers] = useState<User[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [cursors, setCursors] = useState<CursorPosition[]>([]);
@@ -57,31 +60,51 @@ export function RoomProvider({ children, roomId }: RoomContextProps) {
       
       switch (data.type) {
         case "code_update":
-          setCode(data.payload.code);
+          setCode(data.code);
           break;
-        case "user_list":
-          setUsers(data.payload.users);
+        case "language_update":
+          setLanguage(data.language);
           break;
-        case "message":
-          setMessages(prev => [...prev, data.payload]);
+        case "chat_message":
+          setMessages(prev => [...prev, data]);
           break;
         case "cursor_update":
           setCursors(prev => {
-            const existing = prev.findIndex(c => c.userId === data.payload.userId);
+            const existing = prev.findIndex(c => c.userId === data.userId);
             if (existing >= 0) {
               return [
                 ...prev.slice(0, existing),
-                data.payload,
+                data,
                 ...prev.slice(existing + 1)
               ];
             }
-            return [...prev, data.payload];
+            return [...prev, data];
+          });
+          break;
+        case "user_joined":
+          setUsers(prev => {
+            if (!prev.some(u => u.id === data.userId)) {
+              return [...prev, { id: data.userId, username: data.username }];
+            }
+            return prev;
+          });
+          toast({
+            title: "User joined",
+            description: `${data.username} has joined the room`,
+          });
+          break;
+        case "user_left":
+          setUsers(prev => prev.filter(user => user.id !== data.userId));
+          setCursors(prev => prev.filter(cursor => cursor.userId !== data.userId));
+          toast({
+            title: "User left",
+            description: `${data.username} has left the room`,
           });
           break;
         case "error":
           toast({
             title: "Room error",
-            description: data.payload.message,
+            description: data.message,
             variant: "destructive",
           });
           break;
@@ -136,14 +159,14 @@ export function RoomProvider({ children, roomId }: RoomContextProps) {
 
   const updateCode = (newCode: string) => {
     setCode(newCode);
-    if (wsConnection && wsConnection.readyState === WebSocket.OPEN && user) {
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN && user && roomId) {
       sendToWebSocket(wsConnection, {
         type: "code_update",
-        payload: {
-          userId: user.id,
-          code: newCode,
-          roomId
-        }
+        userId: user.id,
+        code: newCode,
+        roomId,
+        language,
+        shouldPersist: true
       });
     }
   };
@@ -151,8 +174,8 @@ export function RoomProvider({ children, roomId }: RoomContextProps) {
   const sendMessage = (message: Message) => {
     if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
       sendToWebSocket(wsConnection, {
-        type: "message",
-        payload: message
+        type: "chat_message",
+        ...message
       });
     }
   };
@@ -161,7 +184,20 @@ export function RoomProvider({ children, roomId }: RoomContextProps) {
     if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
       sendToWebSocket(wsConnection, {
         type: "cursor_update",
-        payload: cursorPosition
+        ...cursorPosition
+      });
+    }
+  };
+
+  const updateLanguage = (newLanguage: string) => {
+    setLanguage(newLanguage);
+    // If needed, broadcast language change to other users
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN && user && roomId) {
+      sendToWebSocket(wsConnection, {
+        type: "language_update",
+        userId: user.id,
+        language: newLanguage,
+        roomId
       });
     }
   };
@@ -179,10 +215,12 @@ export function RoomProvider({ children, roomId }: RoomContextProps) {
 
   const value = {
     code,
+    language,
     users,
     messages,
     cursors,
     updateCode,
+    updateLanguage,
     sendMessage,
     sendCursorPosition,
     saveSnippet

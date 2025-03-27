@@ -116,6 +116,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (data.type === 'video_leave') {
           // Broadcast to all clients in the room
           broadcastToRoom(roomId, data);
+        } else if (data.type === 'cursor_update') {
+          // Broadcast cursor position to all clients in the room
+          broadcastToRoom(roomId, data);
+        } else if (data.type === 'language_update') {
+          // Broadcast language change to all clients in the room
+          broadcastToRoom(roomId, data);
         }
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
