@@ -9,13 +9,25 @@ import CodeRoom from "@/pages/code-room";
 import LandingPage from "@/pages/landing-page";
 import { ProtectedRoute } from "./lib/protected-route";
 import { AuthProvider } from "./hooks/use-auth";
+import { RoomProvider } from "./hooks/use-room";
+import { useParams } from "wouter";
+
+// Wrapper for the CodeRoom component that provides room context
+function CodeRoomWithProvider() {
+  const { roomId } = useParams();
+  return (
+    <RoomProvider roomId={roomId}>
+      <CodeRoom />
+    </RoomProvider>
+  );
+}
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={LandingPage} />
       <ProtectedRoute path="/home" component={HomePage} />
-      <ProtectedRoute path="/room/:roomId" component={CodeRoom} />
+      <ProtectedRoute path="/room/:roomId" component={CodeRoomWithProvider} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
