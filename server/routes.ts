@@ -5,6 +5,8 @@ import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { randomBytes } from "crypto";
 import { executeCode } from "./compile";
+import { db } from "./db";
+import { users, rooms, messages, snippets, waitlist } from "@shared/schema";
 
 interface WebSocketClient extends WebSocket {
   userId?: number;
@@ -14,6 +16,19 @@ interface WebSocketClient extends WebSocket {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize the database if we're using PostgreSQL
+  if (process.env.DATABASE_URL) {
+    try {
+      console.log("Using PostgreSQL with Drizzle ORM");
+      
+      // Simply make an initial query to verify the database connection
+      const testResult = await db.select().from(users).limit(1);
+      console.log("Database connection verified successfully");
+    } catch (error) {
+      console.error("Error connecting to database:", error);
+    }
+  }
+
   // Set up authentication routes
   setupAuth(app);
 
@@ -24,7 +39,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   
   // In-memory storage for active room connections
-  const rooms = new Map<string, Set<WebSocketClient>>();
+  const activeRooms = new Map<string, Set<WebSocketClient>>();
   
   // Set up WebSocket connection handling
   wss.on('connection', (ws: WebSocketClient, req) => {
@@ -45,10 +60,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ws.isAlive = true;
     
     // Add client to room
-    if (!rooms.has(roomId)) {
-      rooms.set(roomId, new Set());
+    if (!activeRooms.has(roomId)) {
+      activeRooms.set(roomId, new Set());
     }
-    rooms.get(roomId)?.add(ws);
+    activeRooms.get(roomId)?.add(ws);
     
     // Notify other room members about new user
     broadcastToRoom(roomId, {
@@ -98,13 +113,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Handle disconnection
     ws.on('close', () => {
-      if (ws.roomId && rooms.has(ws.roomId)) {
-        const room = rooms.get(ws.roomId)!;
+      if (ws.roomId && activeRooms.has(ws.roomId)) {
+        const room = activeRooms.get(ws.roomId)!;
         room.delete(ws);
         
         // Clean up empty rooms
         if (room.size === 0) {
-          rooms.delete(ws.roomId);
+          activeRooms.delete(ws.roomId);
         } else {
           // Notify others that user left
           broadcastToRoom(ws.roomId, {
@@ -137,7 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Helper to broadcast messages to all clients in a room
   function broadcastToRoom(roomId: string, data: any, sender?: WebSocketClient) {
-    const clients = rooms.get(roomId);
+    const clients = activeRooms.get(roomId);
     if (!clients) return;
     
     const message = JSON.stringify(data);
