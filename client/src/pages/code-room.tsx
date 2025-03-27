@@ -3,8 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CodeEditor } from "@/components/code-editor/CodeEditor";
-import { useRoom } from "@/hooks/use-room";
+import CodeEditor from "@/lib/CodeEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -61,7 +60,8 @@ export default function CodeRoom() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { code, language, updateCode, updateLanguage } = useRoom();
+  const [code, setCode] = useState("");
+  const [language, setLanguage] = useState("javascript");
   const [chatMessage, setChatMessage] = useState("");
   const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -79,10 +79,10 @@ export default function CodeRoom() {
   // Update editor when room data changes
   useEffect(() => {
     if (room && !isCodeUpdating.current) {
-      updateCode(room.code || "");
-      updateLanguage(room.language);
+      setCode(room.code || "");
+      setLanguage(room.language);
     }
-  }, [room, updateCode, updateLanguage]);
+  }, [room]);
 
   // Get chat messages
   const {
@@ -211,8 +211,8 @@ export default function CodeRoom() {
       
       if (data.type === "code_update" && data.sender !== user.id) {
         isCodeUpdating.current = true;
-        updateCode(data.code);
-        updateLanguage(data.language);
+        setCode(data.code);
+        setLanguage(data.language);
         setTimeout(() => {
           isCodeUpdating.current = false;
         }, 100);
@@ -331,7 +331,7 @@ export default function CodeRoom() {
                 {room?.name || "Coding Room"}
               </h1>
             </div>
-            <Select value={language} onValueChange={updateLanguage}>
+            <Select value={language} onValueChange={setLanguage}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Select language" />
               </SelectTrigger>
@@ -471,7 +471,11 @@ export default function CodeRoom() {
         {/* Editor Area - Left Side */}
         <div className="w-full md:w-2/3 h-screen p-4 pb-0 md:pb-4 flex flex-col">
           <div className="flex-1 border rounded-md overflow-hidden">
-            <CodeEditor roomId={roomId} />
+            <CodeEditor 
+              value={code} 
+              language={language} 
+              onChange={setCode} 
+            />
           </div>
           
           {/* Output Panel */}
